@@ -1,5 +1,6 @@
 package com.yupi.springbootinit.model.vo;
 
+import io.swagger.models.auth.In;
 import lombok.Data;
 
 /**
@@ -7,6 +8,8 @@ import lombok.Data;
  */
 @Data
 public class BIResponse {
+
+    private Long chartId;
 
     private  String genChart;
     private String genResult;
