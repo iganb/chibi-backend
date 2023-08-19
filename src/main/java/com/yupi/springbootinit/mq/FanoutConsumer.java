@@ -16,13 +16,13 @@ public class FanoutConsumer {
     Channel channel2 = connection.createChannel();
 
     channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
-    channel2.exchangeDeclare(EXCHANGE_NAME, "fanout");
+
     //创建队列，随机分配一个队列
     String queueName = "小王的工作队列";
     channel.queueDeclare(queueName, true, false, false, null);
     channel.queueBind(queueName, EXCHANGE_NAME, "");
 
-
+    channel2.exchangeDeclare(EXCHANGE_NAME, "fanout");
     String queueName2 = "小李的工作队列";
     channel2.queueDeclare(queueName2, true, false, false, null);
     channel2.queueBind(queueName2, EXCHANGE_NAME, "");
