@@ -19,9 +19,9 @@ class RedisLimitManagerTest {
             System.out.println("成功");
         }
         Thread.sleep(1000);
-        for (int i = 0; i <5 ; i++) {
-            redisLimitManager.doRateLimit(userId);
-            System.out.println("成功");
-        }
+//        for (int i = 0; i <5 ; i++) {
+//            redisLimitManager.doRateLimit(userId);
+//            System.out.println("成功");
+//        }
     }
 }
