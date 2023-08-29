@@ -27,7 +27,7 @@ public class BiMessageConsumer {
     private AiManager aiManager;
     //指定监听的消息队列和确认机制
     @SneakyThrows
-    @RabbitListener(queues = {"code_queue"}, ackMode = "MANUAL")
+    @RabbitListener(queues = {BiMqConstant.BI_QUEUE_NAME}, ackMode = "MANUAL")
     public void receiveMessage(String message, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
         if (StringUtils.isBlank(message)){
             channel.basicNack(deliveryTag,false,false);

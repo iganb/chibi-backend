@@ -248,7 +248,7 @@ public class ChartController {
         redisLimitManager.doRateLimit("genChartByAI_"+loginUser.getId());
 
 
-        long biModelId=1679305672904269825L;
+        long biModelId=CommonConstant.BI_MODEL_ID;
 //        分析需求：
 //        分析网站用户的增长情况
 //        原始数据：
@@ -272,6 +272,14 @@ public class ChartController {
 
         userInput.append(csvData).append("\n");
 
+        String result = aiManager.doChat(biModelId, userInput.toString());
+        String[] splits = result.split("【【【【【");
+        if (splits.length < 3) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 生成错误");
+        }
+        String genChart = splits[1].trim();
+        String genResult = splits[2].trim();
+
         //插入到数据库
         Chart chart = new Chart();
 
@@ -279,51 +287,21 @@ public class ChartController {
         chart.setName(name);
         chart.setChartData(csvData);
         chart.setChartType(chartType);
-        chart.setStatus("wait");
+        chart.setGenChart(genChart);
+        chart.setGenResult(genResult);
+        chart.setStatus("succeed");
         chart.setUserId(loginUser.getId());
         boolean saveResult=chartService.save(chart);
         ThrowUtils.throwIf(!saveResult,ErrorCode.SYSTEM_ERROR,"图表保存失败");
 
 
-        CompletableFuture.runAsync(()->{
-// 先修改图表任务状态为 “执行中”。等执行成功后，修改为 “已完成”、保存执行结果；执行失败后，状态修改为 “失败”，记录任务失败信息。(为了防止同一个任务被多次执行)
-            Chart updateChart =new Chart();
-            updateChart.setId(chart.getId());
-            // 把任务状态改为执行中
-            updateChart.setStatus("running");
-            boolean b = chartService.updateById(updateChart);
-            // 如果提交失败(一般情况下,更新失败可能意味着你的数据库出问题了)
-            if (!b){
-               handleChartUpdateError(chart.getId(),"更新图表执行中状态失败");
-               return;
-            }
 
-            //调用AI
-            String result = aiManager.doChat(biModelId, userInput.toString());
-            String[] splits=result.split("【【【【【");
-            if (splits.length<3){
-                handleChartUpdateError(chart.getId(),"AI生成错误");
-                return;
-            }
-            String genChart=splits[1].trim();
-            String genResult=splits[2].trim();
-            // 调用AI得到结果之后,再更新一次
-            Chart updateChartResult =new Chart();
-            updateChartResult.setId(chart.getId());
-            updateChartResult.setGenChart(genChart);
-            updateChartResult.setGenResult(genResult);
-            updateChartResult.setStatus("succeed");
-            boolean updateResult = chartService.updateById(updateChartResult);
-            if (!updateResult){
-                handleChartUpdateError(chart.getId(),"更新图表成功状态失败");
-
-            }
-        },threadPoolExecutor);
         BIResponse biResponse = new BIResponse();
         biResponse.setChartId(chart.getId());
+        biResponse.setGenChart(genChart);
+        biResponse.setGenResult(genResult);
 
 
-        
         return ResultUtils.success(biResponse);
 
     }
@@ -407,51 +385,15 @@ public class ChartController {
         chart.setUserId(loginUser.getId());
         boolean saveResult=chartService.save(chart);
         ThrowUtils.throwIf(!saveResult,ErrorCode.SYSTEM_ERROR,"图表保存失败");
-
-
-        CompletableFuture.runAsync(()->{
-            // 先修改图表任务状态为 “执行中”。等执行成功后，修改为 “已完成”、保存执行结果；执行失败后，状态修改为 “失败”，记录任务失败信息。(为了防止同一个任务被多次执行)
-            Chart updateChart =new Chart();
-            updateChart.setId(chart.getId());
-            // 把任务状态改为执行中
-            updateChart.setStatus("running");
-            boolean b = chartService.updateById(updateChart);
-            // 如果提交失败(一般情况下,更新失败可能意味着你的数据库出问题了)
-            if (!b){
-                handleChartUpdateError(chart.getId(),"更新图表执行中状态失败");
-                return;
-            }
-
-            //调用AI
-            String result = aiManager.doChat(biModelId, userInput.toString());
-            String[] splits=result.split("【【【【【");
-            if (splits.length<3){
-                handleChartUpdateError(chart.getId(),"AI生成错误");
-                return;
-            }
-            String genChart=splits[1].trim();
-            String genResult=splits[2].trim();
-            // 调用AI得到结果之后,再更新一次
-            Chart updateChartResult =new Chart();
-            updateChartResult.setId(chart.getId());
-            updateChartResult.setGenChart(genChart);
-            updateChartResult.setGenResult(genResult);
-            updateChartResult.setStatus("succeed");
-            boolean updateResult = chartService.updateById(updateChartResult);
-            if (!updateResult){
-                handleChartUpdateError(chart.getId(),"更新图表成功状态失败");
-
-            }
-        },threadPoolExecutor);
+        long newChartId=chart.getId();
+        biMessageProducer.sendMessage(String.valueOf(newChartId));
         BIResponse biResponse = new BIResponse();
-        biResponse.setChartId(chart.getId());
-
-
-
+        biResponse.setChartId(newChartId);
         return ResultUtils.success(biResponse);
 
     }
     private void handleChartUpdateError(long chartId,String execMessage){
+
         Chart updateChartResult = new Chart();
         updateChartResult.setId(chartId);
         updateChartResult.setStatus("failed");
@@ -533,9 +475,38 @@ public class ChartController {
         ThrowUtils.throwIf(!saveResult,ErrorCode.SYSTEM_ERROR,"图表保存失败");
 
 
-        CompletableFuture.runAsync(()->{
+        // todo 建议处理任务队列满了后，抛异常的情况
+        CompletableFuture.runAsync(() -> {
+            // 先修改图表任务状态为 “执行中”。等执行成功后，修改为 “已完成”、保存执行结果；执行失败后，状态修改为 “失败”，记录任务失败信息。
+            Chart updateChart = new Chart();
+            updateChart.setId(chart.getId());
+            updateChart.setStatus("running");
+            boolean b = chartService.updateById(updateChart);
+            if (!b) {
+                handleChartUpdateError(chart.getId(), "更新图表执行中状态失败");
+                return;
+            }
+            // 调用 AI
+            String result = aiManager.doChat(biModelId, userInput.toString());
+            String[] splits = result.split("【【【【【");
+            if (splits.length < 3) {
+                handleChartUpdateError(chart.getId(), "AI 生成错误");
+                return;
+            }
+            String genChart = splits[1].trim();
+            String genResult = splits[2].trim();
+            Chart updateChartResult = new Chart();
+            updateChartResult.setId(chart.getId());
+            updateChartResult.setGenChart(genChart);
+            updateChartResult.setGenResult(genResult);
+            // todo 建议定义状态为枚举值
+            updateChartResult.setStatus("succeed");
+            boolean updateResult = chartService.updateById(updateChartResult);
+            if (!updateResult) {
+                handleChartUpdateError(chart.getId(), "更新图表成功状态失败");
+            }
+        }, threadPoolExecutor);
 
-        },threadPoolExecutor);
         BIResponse biResponse = new BIResponse();
         biResponse.setChartId(chart.getId());
 
