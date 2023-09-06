@@ -5,8 +5,10 @@ spring:
   application:
     name: chibi-backend
   # 默认 dev 环境
-  profiles:
-    active: dev
+  config:
+    activate:
+      on-profile:
+        - dev
   # 支持 swagger3
   mvc:
     pathmatch:
