@@ -1,8 +1,8 @@
 package generator.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.yupi.springbootinit.mapper.UserMapper;
-import com.yupi.springbootinit.model.entity.User;
+import com.chibi.springbootinit.mapper.UserMapper;
+import com.chibi.springbootinit.model.entity.User;
 import generator.service.UserService;
 import org.springframework.stereotype.Service;
 
